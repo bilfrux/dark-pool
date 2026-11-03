@@ -1,3 +1,12 @@
+# Dark Pool — Sealed-Bid Auctions
+
+> [!IMPORTANT]
+> 🏆 **Prize winner at ETHDenver 2026 on the ADI track, selected among 186 projects.**
+
+Dark Pool is a sealed-bid RWA auction protocol (`ShadowBidVault`) deployed on ADI Chain, built with Scaffold-ETH 2.
+
+---
+
 # 🏗 Scaffold-ETH 2
 
 <h4 align="center">
