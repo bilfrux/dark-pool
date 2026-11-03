@@ -78,7 +78,7 @@ flowchart LR
 - **Emergency pause** for compliance incidents, plus a reentrancy guard on every function that moves funds.
 
 ### 🤖 AI assistant for bidders and creators
-Server-side AI endpoints (`/api/ai/*`) powered by Google Gemini, with a pure statistical fallback when the model is unavailable:
+Server-side AI endpoints (`/api/ai/*`) powered by **Groq (Llama 3.3 70B)**, falling back to OpenAI (GPT-4o mini), then Google Gemini (2.0 Flash), then a pure statistical model when no AI provider is available:
 RFP generation, lot analysis, bid drafting, bid competitiveness against market data, abnormally-low-bid detection, bid scoring and a post-reveal report.
 
 ---
@@ -90,7 +90,7 @@ RFP generation, lot analysis, bid drafting, bid competitiveness against market d
 │  Landing · Auctions list · Create auction · Auction detail / BidPanel · KYB    │
 │                                                                                │
 │  API routes:  /api/kyb/*  (Sumsub, on-chain credentialing)                     │
-│               /api/ai/*   (Gemini + statistical fallback)                      │
+│               /api/ai/*   (Groq → OpenAI → Gemini → statistical fallback)      │
 │               /api/cron/rescreen  (daily sanctions re-screening)               │
 │                         │                         │                            │
 │                    PostgreSQL (Prisma)       wagmi / viem                      │
@@ -126,7 +126,7 @@ RFP generation, lot analysis, bid drafting, bid competitiveness against market d
 | Frontend | Next.js (App Router), React, TypeScript, wagmi, viem, RainbowKit, Tailwind CSS + DaisyUI |
 | Backend | Next.js API routes, Prisma, PostgreSQL, Vercel Cron |
 | Compliance | Sumsub (KYB), ComplyAdvantage (sanctions screening) |
-| AI | Google Gemini, statistical fallback |
+| AI | Groq (Llama 3.3 70B), OpenAI and Gemini as fallbacks, statistical fallback |
 | Base template | [Scaffold-ETH 2](https://scaffoldeth.io) |
 
 ---
@@ -202,7 +202,7 @@ Copy `packages/nextjs/.env.local.example` to `packages/nextjs/.env.local`. The m
 | `SUMSUB_APP_TOKEN`, `SUMSUB_SECRET_KEY`, `SUMSUB_WEBHOOK_SECRET` | KYB provider. Without them the app runs in **demo mode** (`/api/kyb/demo-approve`). |
 | `COMPLY_ADVANTAGE_API_KEY` | Sanctions screening (skipped in demo mode) |
 | `PLATFORM_ADMIN_PRIVATE_KEY`, `FACTORY_CONTRACT_ADDRESS`, `NEXT_PUBLIC_FACTORY_ADDRESS` | Server-side on-chain credentialing of approved institutions |
-| `GEMINI_API_KEY` | AI features |
+| `GROQ_API_KEY` | AI features (primary provider). `OPENAI_API_KEY` and `GEMINI_API_KEY` are optional fallbacks. |
 | `CRON_SECRET` | Protects `/api/cron/rescreen` |
 
 ### Tests
