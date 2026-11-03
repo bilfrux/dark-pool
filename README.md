@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="packages/nextjs/public/logo.svg" alt="Dark Pool logo" width="72" />
+<img src="packages/nextjs/public/logo.svg" alt="Dark Pool logo" width="96" />
 
 # Dark Pool
 

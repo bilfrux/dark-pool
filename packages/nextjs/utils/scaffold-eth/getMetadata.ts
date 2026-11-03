@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 const baseUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
   ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
   : `http://localhost:${process.env.PORT || 3000}`;
-const titleTemplate = "%s | Scaffold-ETH 2";
+const titleTemplate = "%s | Dark Pool";
 
 export const getMetadata = ({
   title,
@@ -47,10 +47,12 @@ export const getMetadata = ({
       icon: [
         {
           url: "/favicon.png",
-          sizes: "32x32",
+          sizes: "256x256",
           type: "image/png",
         },
+        { url: "/logo.svg", type: "image/svg+xml" },
       ],
+      apple: "/favicon.png",
     },
   };
 };
