@@ -42,3 +42,11 @@ model KybAuditLog {
 
   @@index([walletAddress])
 }
+
+// ─── API rate limiting (fixed window counters) ────────────────────────────────
+// Shared across serverless instances, unlike an in-memory limiter.
+model RateLimit {
+  key         String   @id
+  windowStart DateTime @default(now())
+  count       Int      @default(0)
+}

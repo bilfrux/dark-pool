@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { aiRateLimit } from "~~/lib/rate-limit";
 import { runInference } from "~~/services/gemini/client";
 
 interface BidDraftRequest {
@@ -25,6 +26,9 @@ function buildFallbackDraft(body: BidDraftRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const limited = await aiRateLimit(req);
+  if (limited) return limited;
+
   try {
     const body = (await req.json()) as BidDraftRequest;
     const { auctionTitle, auctionDescription, providerPrice, providerStrengths } = body;

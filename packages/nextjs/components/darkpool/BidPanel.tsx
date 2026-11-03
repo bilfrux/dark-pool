@@ -60,6 +60,23 @@ function saveBidData(vault: string, user: string, data: StoredBidData) {
   }
 }
 
+// The salt only lives in this browser: losing it means the bid can't be revealed and the deposit is slashed.
+function downloadBidBackup(vault: string, user: string, data: StoredBidData) {
+  const backup = {
+    vault,
+    bidder: user,
+    priceEth: data.priceEth,
+    salt: data.salt,
+    savedAt: new Date(data.updatedAt).toISOString(),
+  };
+  const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `darkpool-bid-${vault.slice(0, 10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function loadBidData(vault: string, user: string): StoredBidData | null {
   try {
     const raw = localStorage.getItem(bidStorageKey(vault, user));
@@ -247,7 +264,7 @@ export function BidPanel({
       const bidData: StoredBidData = { priceEth, salt, updatedAt: Date.now() };
       saveBidData(vaultAddress, userAddress, bidData);
       setSavedBidData(bidData);
-      toast.success("Bid committed. Save your salt.");
+      toast.success("Bid committed. Download a backup of your salt: you need it to reveal.");
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message.slice(0, 80) : "Failed");
     }
@@ -440,6 +457,13 @@ export function BidPanel({
                         {savedBidData.salt}
                       </p>
                       <p className="font-mono text-[9px] opacity-40 mt-0.5">⚠ YOU NEED THIS TO REVEAL YOUR BID</p>
+                      <button
+                        type="button"
+                        onClick={() => userAddress && downloadBidBackup(vaultAddress, userAddress, savedBidData)}
+                        className="mt-2 font-mono text-[9px] tracking-[0.15em] uppercase border border-white/40 px-2 py-1 hover:bg-white hover:text-black transition-all duration-100"
+                      >
+                        [ DOWNLOAD BACKUP ]
+                      </button>
                     </div>
                   )}
 

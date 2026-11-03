@@ -16,7 +16,7 @@ function normalizeEnvAddress(value: string | undefined, fallback: string): `0x${
 
 export const FACTORY_ADDRESS = normalizeEnvAddress(
   process.env.NEXT_PUBLIC_FACTORY_ADDRESS,
-  "0xbF8F2953af175aDb72e51B95e9C8157fA2398622",
+  "0xEeeF70011E37EAe0Ec00B70a85Fc7218DF685d3b",
 );
 
 // DDSC: UAE Central Bank-licensed dirham stablecoin on ADI Chain.

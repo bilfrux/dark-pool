@@ -23,18 +23,18 @@ const FEATURES = [
   },
   {
     id: "04",
-    title: "Anti-Sniping",
-    description: "Configurable sniping protection. Late bids extend the auction automatically.",
+    title: "KYB-Gated Access",
+    description: "Only verified institutions can bid. Accreditation and jurisdiction rules are enforced on-chain.",
   },
   {
     id: "05",
-    title: "Bid Increases",
-    description: "Already committed? Increase your bid before close if you've undervalued.",
+    title: "Bid Updates",
+    description: "Already committed? Replace your sealed bid with a new one any time before close.",
   },
   {
     id: "06",
-    title: "Privacy Controls",
-    description: "Choose between public or invite-only visibility. Control who participates.",
+    title: "Invite-Only Bidding",
+    description: "Each auction whitelists the institutions allowed to bid. Control who participates.",
   },
   {
     id: "07",

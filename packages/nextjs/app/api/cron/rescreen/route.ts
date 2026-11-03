@@ -2,7 +2,7 @@
  * GET /api/cron/rescreen
  * Cron job: re-screen all verified institutions against sanctions.
  * Should be triggered by a cron service (e.g. Vercel Cron, daily).
- * Protected by CRON_SECRET header.
+ * Protected by CRON_SECRET: Vercel Cron sends it as `Authorization: Bearer <CRON_SECRET>`.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { onChainRevokeInstitution } from "~~/lib/onchain-credentials";
@@ -10,8 +10,9 @@ import { prisma } from "~~/lib/prisma";
 import { hasSanctionHit, screenEntity } from "~~/lib/sanctions";
 
 export async function GET(req: NextRequest) {
-  const secret = req.headers.get("x-cron-secret");
-  if (secret !== process.env.CRON_SECRET) {
+  const expected = process.env.CRON_SECRET;
+  const auth = req.headers.get("authorization");
+  if (!expected || (auth !== `Bearer ${expected}` && req.headers.get("x-cron-secret") !== expected)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

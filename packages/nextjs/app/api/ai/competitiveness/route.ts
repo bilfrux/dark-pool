@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { aiRateLimit } from "~~/lib/rate-limit";
 import { runInference } from "~~/services/gemini/client";
 import { computeCompetitivenessFallback } from "~~/services/og/fallback";
 
@@ -22,6 +23,9 @@ interface CompetitivenessRequest {
 }
 
 export async function POST(req: NextRequest) {
+  const limited = await aiRateLimit(req);
+  if (limited) return limited;
+
   // Garantir que la réponse est toujours du JSON
   try {
     const body = (await req.json()) as CompetitivenessRequest;

@@ -1,10 +1,13 @@
 /**
  * POST /api/kyb/submit
- * Body: { walletAddress: string, legalName?: string, jurisdiction?: string, contactEmail?: string }
+ * Body: { walletAddress, legalName?, jurisdiction?, contactEmail?, timestamp, signature }
+ * The signature (see lib/wallet-auth.ts) proves the caller owns walletAddress.
  * Returns: { token: string, demo: true } — demo token (Sumsub integration on roadmap)
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "~~/lib/prisma";
+import { clientIp, enforceLimits } from "~~/lib/rate-limit";
+import { verifyKybSignature } from "~~/lib/wallet-auth";
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,11 +16,21 @@ export async function POST(req: NextRequest) {
       legalName?: string;
       jurisdiction?: string;
       contactEmail?: string;
+      timestamp?: number;
+      signature?: string;
     };
 
     const walletAddress = body.walletAddress?.toLowerCase();
     if (!walletAddress || !/^0x[0-9a-f]{40}$/i.test(walletAddress)) {
       return NextResponse.json({ error: "Invalid wallet address" }, { status: 400 });
+    }
+
+    const limited = await enforceLimits([{ key: `kyb-submit:ip:${clientIp(req)}`, max: 10, windowSeconds: 3600 }]);
+    if (limited) return limited;
+
+    const sigError = await verifyKybSignature("submit", walletAddress, body.timestamp, body.signature);
+    if (sigError) {
+      return NextResponse.json({ error: sigError }, { status: 401 });
     }
 
     // Create or upsert institution record

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { aiRateLimit } from "~~/lib/rate-limit";
 import { runInference } from "~~/services/gemini/client";
 
 interface LotAnalysisRequest {
@@ -33,6 +34,9 @@ function buildFallbackAnalysis(body: LotAnalysisRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const limited = await aiRateLimit(req);
+  if (limited) return limited;
+
   try {
     const body = (await req.json()) as LotAnalysisRequest;
     const { auctionTitle, auctionDescription } = body;

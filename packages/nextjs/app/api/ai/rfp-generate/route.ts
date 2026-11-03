@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { aiRateLimit } from "~~/lib/rate-limit";
 import { runInference } from "~~/services/gemini/client";
 
 interface RFPGenerateRequest {
@@ -30,6 +31,9 @@ function buildFallbackRFP(body: RFPGenerateRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const limited = await aiRateLimit(req);
+  if (limited) return limited;
+
   try {
     const body = (await req.json()) as RFPGenerateRequest;
     const { assetType, requirements } = body;

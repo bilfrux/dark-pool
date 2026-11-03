@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useAccount } from "wagmi";
+import { useAccount, useSignMessage } from "wagmi";
 import { type KYBStatus, KYB_STATUS_COLOR, KYB_STATUS_LABEL } from "~~/lib/types";
+import { type KybAction, buildKybMessage } from "~~/lib/wallet-auth";
 
 type StepId = "connect" | "register" | "verify" | "status";
 
@@ -18,6 +19,7 @@ interface KybStatusResponse {
 
 export default function KybPage() {
   const { address: walletAddress, isConnected } = useAccount();
+  const { signMessageAsync } = useSignMessage();
   const [step, setStep] = useState<StepId>("connect");
   const [kybStatus, setKybStatus] = useState<KybStatusResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -66,15 +68,29 @@ export default function KybPage() {
     else setStep("status");
   }, [kybStatus, isConnected, walletAddress]);
 
+  // Proves wallet ownership to the API (see lib/wallet-auth.ts)
+  async function signKyb(action: KybAction, wallet: string) {
+    const timestamp = Date.now();
+    const signature = await signMessageAsync({ message: buildKybMessage(action, wallet, timestamp) });
+    return { timestamp, signature };
+  }
+
   async function handleSubmit() {
     if (!walletAddress) return;
     setIsLoading(true);
     setSubmitError(null);
     try {
+      let auth: { timestamp: number; signature: string };
+      try {
+        auth = await signKyb("submit", walletAddress);
+      } catch {
+        setSubmitError("Signature rejected. Signing proves you own this wallet.");
+        return;
+      }
       const res = await fetch("/api/kyb/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ walletAddress, legalName, jurisdiction, contactEmail }),
+        body: JSON.stringify({ walletAddress, legalName, jurisdiction, contactEmail, ...auth }),
       });
       const data = (await res.json()) as { token?: string; demo?: boolean; error?: string };
       if (!res.ok || data.error) {
@@ -212,9 +228,21 @@ export default function KybPage() {
                       onClick={async () => {
                         if (!walletAddress) return;
                         setIsLoading(true);
+                        setSubmitError(null);
                         try {
-                          await fetch(`/api/kyb/demo-approve?wallet=${walletAddress}`, { method: "POST" });
+                          const auth = await signKyb("demo-approve", walletAddress);
+                          const res = await fetch(`/api/kyb/demo-approve?wallet=${walletAddress}`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify(auth),
+                          });
+                          if (!res.ok) {
+                            const data = (await res.json().catch(() => ({}))) as { error?: string };
+                            setSubmitError(data.error ?? "Approval failed");
+                          }
                           await fetchStatus();
+                        } catch {
+                          setSubmitError("Signature rejected. Signing proves you own this wallet.");
                         } finally {
                           setIsLoading(false);
                         }
@@ -224,6 +252,7 @@ export default function KybPage() {
                     >
                       {isLoading ? "PROCESSING..." : "[ SIMULATE KYB APPROVAL ]"}
                     </button>
+                    {submitError && <p className="font-mono text-[10px] text-red-400 uppercase">{submitError}</p>}
                   </div>
                 ) : (
                   <>

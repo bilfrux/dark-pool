@@ -8,6 +8,8 @@
 
 🏆 **Prize winner at ETHDenver 2026 on the ADI track, selected among 186 projects.**
 
+**[Live demo → dark-pool-five.vercel.app](https://dark-pool-five.vercel.app)** (ADI Testnet)
+
 ![Solidity](https://img.shields.io/badge/Solidity-0.8.30-363636?logo=solidity)
 ![Next.js](https://img.shields.io/badge/Next.js-App_Router-000000?logo=nextdotjs)
 ![Hardhat](https://img.shields.io/badge/Hardhat-hardhat--deploy-FFF100)
@@ -61,7 +63,8 @@ flowchart LR
 
 ### 🔒 Sealed bidding
 - Commit–reveal with a per-bid random salt. Nobody, including the auction creator, can see prices before close.
-- Optional encrypted off-chain bid data: each vault publishes the creator's **ECIES public key**, and every commitment carries a storage root pointing to the encrypted payload.
+- Each vault stores the creator's ECIES public key and each commitment a storage-root reference, laying the groundwork for encrypted off-chain bid documents. Encryption and upload are not implemented yet: the storage root is entered manually.
+- Bid salts stay in the bidder's browser, with a one-click JSON backup (losing the salt means the bid cannot be revealed).
 - Full on-chain audit trail through `getAuditData()`.
 
 ### 🏛 Institutional compliance
@@ -214,6 +217,17 @@ yarn hardhat:test
 The suite (`packages/hardhat/test/ShadowBid.test.ts`, 41 tests) covers KYB gating, commit–reveal, deposit slashing, settlement, bonds, escrow, oracle flows and the second-bidder fallback.
 
 ---
+
+## Security notes
+
+An internal audit (November 2026) identified design issues in the **deployed** contracts. They are acceptable for a testnet demo but must be addressed before any real use:
+
+- **Trust model:** the auction creator is set as the vault's admin and chooses its oracle, so the escrow, bond slashing and pause can be controlled by the creator.
+- **Economic model:** the lowest revealed price wins, yet the winner pays the creator. The protocol needs to commit to either a sale (highest bid wins) or a procurement flow (creator pays the winner).
+- **Liveness:** only the creator can call `settle()`, and an auction where nobody reveals cannot be settled or cancelled, so deposits can get stuck.
+- ERC-20 transfers are unchecked, refunds are pushed in loops (one reverting recipient blocks settlement), and revoking an institution does not remove `BUYER_ROLE`.
+
+Already mitigated in the web app: KYB demo endpoints require a wallet signature, are idempotent and capped per IP and per day (they spend the admin wallet's gas), and AI endpoints are rate-limited per IP with a global daily cap.
 
 ## Team
 

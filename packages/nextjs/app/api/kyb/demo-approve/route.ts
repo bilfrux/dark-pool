@@ -1,13 +1,19 @@
 /**
- * POST /api/kyb/demo-approve?wallet=0x...
+ * POST /api/kyb/demo-approve?wallet=0x...   Body: { timestamp, signature }
  * DEMO ONLY — instantly approves a KYB application and triggers on-chain credentialing.
  * Only available when SUMSUB_APP_TOKEN is not set (i.e. no real Sumsub integration).
+ *
+ * Every approval sends two transactions paid by the platform admin wallet, so it is guarded by:
+ * a wallet signature (no approving addresses you don't own), idempotency (one approval per wallet),
+ * and per-IP / global daily caps (bounds gas spending even with many freshly generated wallets).
  *
  * 📋 ROADMAP: Replace with real Sumsub webhook flow.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { onChainVerifyInstitution } from "~~/lib/onchain-credentials";
 import { prisma } from "~~/lib/prisma";
+import { clientIp, enforceLimits } from "~~/lib/rate-limit";
+import { verifyKybSignature } from "~~/lib/wallet-auth";
 
 export async function POST(req: NextRequest) {
   // Guard: only available in demo mode (no real Sumsub credentials)
@@ -20,10 +26,32 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid wallet" }, { status: 400 });
   }
 
+  const body = (await req.json().catch(() => ({}))) as { timestamp?: number; signature?: string };
+  const sigError = await verifyKybSignature("demo-approve", wallet, body.timestamp, body.signature);
+  if (sigError) {
+    return NextResponse.json({ error: sigError }, { status: 401 });
+  }
+
   const institution = await prisma.institution.findUnique({ where: { walletAddress: wallet } });
   if (!institution) {
     return NextResponse.json({ error: "Institution not found" }, { status: 404 });
   }
+
+  // Idempotent: never spend admin gas twice on the same wallet
+  if (institution.onChainVerified) {
+    return NextResponse.json({
+      ok: true,
+      kybStatus: institution.kybStatus,
+      onChainVerified: true,
+      alreadyVerified: true,
+    });
+  }
+
+  const limited = await enforceLimits([
+    { key: `kyb-approve:ip:${clientIp(req)}`, max: 3, windowSeconds: 86_400 },
+    { key: "kyb-approve:global", max: 30, windowSeconds: 86_400 },
+  ]);
+  if (limited) return limited;
 
   // Mark as verified in DB
   await prisma.institution.update({
