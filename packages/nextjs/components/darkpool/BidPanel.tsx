@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import toast from "react-hot-toast";
-import { encodeAbiParameters, keccak256, parseAbiParameters, parseEther, toHex } from "viem";
+import { encodePacked, keccak256, parseEther, toHex } from "viem";
 import {
   useAccount,
   useChainId,
@@ -223,10 +223,9 @@ export function BidPanel({
     }
   }
 
+  // Must match ShadowBidVault.revealBid: keccak256(abi.encodePacked(price, salt, msg.sender))
   function computeCommitHash(price: bigint, s: `0x${string}`, sender: `0x${string}`): `0x${string}` {
-    return keccak256(
-      encodeAbiParameters(parseAbiParameters("uint256 price, bytes32 salt, address sender"), [price, s, sender]),
-    );
+    return keccak256(encodePacked(["uint256", "bytes32", "address"], [price, s, sender]));
   }
 
   async function handleCommit() {
