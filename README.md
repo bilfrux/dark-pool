@@ -1,91 +1,226 @@
-# Dark Pool — Sealed-Bid Auctions
+<div align="center">
 
-> [!IMPORTANT]
-> 🏆 **Prize winner at ETHDenver 2026 on the ADI track, selected among 186 projects.**
+<img src="packages/nextjs/public/logo.svg" alt="Dark Pool logo" width="72" />
 
-Dark Pool is a sealed-bid RWA auction protocol (`ShadowBidVault`) deployed on ADI Chain, built with Scaffold-ETH 2.
+# Dark Pool
+
+**Compliant sealed-bid auctions for institutional real-world assets, on ADI Chain.**
+
+🏆 **Prize winner at ETHDenver 2026 on the ADI track, selected among 186 projects.**
+
+![Solidity](https://img.shields.io/badge/Solidity-0.8.30-363636?logo=solidity)
+![Next.js](https://img.shields.io/badge/Next.js-App_Router-000000?logo=nextdotjs)
+![Hardhat](https://img.shields.io/badge/Hardhat-hardhat--deploy-FFF100)
+![ADI Chain](https://img.shields.io/badge/Network-ADI_Testnet-1f6feb)
+![License](https://img.shields.io/badge/License-MIT-green)
+
+</div>
 
 ---
 
-# 🏗 Scaffold-ETH 2
+## The problem
 
-<h4 align="center">
-  <a href="https://docs.scaffoldeth.io">Documentation</a> |
-  <a href="https://scaffoldeth.io">Website</a>
-</h4>
+Institutions trading large real-world assets (real estate, private credit, tokenized securities) cannot run auctions on a public order book: every bid is visible, so participants get front-run, copied or undercut. Off-chain sealed-bid processes fix that, but they rely on a trusted intermediary and offer no verifiable audit trail.
 
-🧪 An open-source, up-to-date toolkit for building decentralized applications (dapps) on the Ethereum blockchain. It's designed to make it easier for developers to create and deploy smart contracts and build user interfaces that interact with those contracts.
+## The solution
 
-> [!NOTE]
-> 🤖 Scaffold-ETH 2 is AI-ready! It has everything agents need to build on Ethereum. Check `.agents/`, `.claude/`, `.opencode` or `.cursor/` for more info.
+**Dark Pool** is a sealed-bid auction protocol where:
 
-⚙️ Built using NextJS, RainbowKit, Hardhat, Wagmi, Viem, and Typescript.
+- **Bids stay hidden** until the auction closes, using a cryptographic commit–reveal scheme.
+- **Rules are enforced by smart contracts**: one immutable vault per auction, deterministic winner selection, escrowed payment and collateral.
+- **Only vetted institutions can take part**, through an on-chain KYB registry with accreditation, jurisdiction and conflict-of-interest checks.
 
-- ✅ **Contract Hot Reload**: Your frontend auto-adapts to your smart contract as you edit it.
-- 🪝 **[Custom hooks](https://docs.scaffoldeth.io/hooks/)**: Collection of React hooks wrapper around [wagmi](https://wagmi.sh/) to simplify interactions with smart contracts with typescript autocompletion.
-- 🧱 [**Components**](https://docs.scaffoldeth.io/components/): Collection of common web3 components to quickly build your frontend.
-- 🔥 **Burner Wallet & Local Faucet**: Quickly test your application with a burner wallet and local faucet.
-- 🔐 **Integration with Wallet Providers**: Connect to different wallet providers and interact with the Ethereum network.
+It is built for **ADI Chain**, an EVM chain designed for regulated institutional finance. Settlement uses an ERC-20 stablecoin (DDSC).
 
-![Debug Contracts tab](https://github.com/scaffold-eth/scaffold-eth-2/assets/55535804/b237af0c-5027-4849-a5c1-2e31495cccb1)
+---
 
-## Requirements
+## How an auction works
 
-Before you begin, you need to install the following tools:
+```mermaid
+flowchart LR
+    A[KYB verification<br/>institution registered on-chain] --> B[Create vault<br/>creator posts a bond]
+    B --> C[Review window<br/>bidders read asset docs]
+    C --> D[Commit<br/>hash of price + salt + deposit]
+    D --> E[Reveal<br/>price and salt disclosed]
+    E --> F[Settle<br/>winner picked on-chain]
+    F --> G[Payment in escrow<br/>DDSC]
+    G --> H[Oracle confirms delivery<br/>funds released to creator]
+```
 
-- [Node (>= v20.18.3)](https://nodejs.org/en/download/)
-- Yarn ([v1](https://classic.yarnpkg.com/en/docs/install/) or [v2+](https://yarnpkg.com/getting-started/install))
-- [Git](https://git-scm.com/downloads)
+1. **KYB.** An institution submits its KYB application. Once approved, the platform admin calls `verifyInstitution()` on the factory, recording its accreditation status and jurisdiction on-chain.
+2. **Create.** An institution holding `BUYER_ROLE` deploys a new `ShadowBidVault` through the factory (EIP-1167 minimal-proxy clone). All parameters are fixed at creation: timing, deposit, whitelisted bidders, allowed jurisdictions, oracle, settlement token and a hash of the asset's legal documents. The creator posts a **bond of 0.5% of the declared asset value** (min 0.01 ADI).
+3. **Review.** A review window gives bidders time to inspect the asset documentation before bidding opens.
+4. **Commit.** Each bidder signs an **EIP-712 conflict-of-interest attestation**, then submits `keccak256(price, salt, address)` together with a deposit in ADI. Bids can be updated until close.
+5. **Reveal.** After close, bidders reveal their price and salt. The contract checks them against the commitment. **Anyone who does not reveal forfeits their deposit.**
+6. **Settle.** The creator triggers settlement. The contract picks the winning bid deterministically (lowest revealed price, procurement-style), keeps track of the runner-up and refunds every other deposit.
+7. **Pay & deliver.** The winner pays in DDSC into escrow. When the oracle confirms real-world delivery, the payment is released to the creator and any tokenized asset (ERC-721) is transferred to the winner.
 
-## Quickstart
+---
 
-To get started with Scaffold-ETH 2, follow the steps below:
+## Key features
 
-1. Install dependencies if it was skipped in CLI:
+### 🔒 Sealed bidding
+- Commit–reveal with a per-bid random salt. Nobody, including the auction creator, can see prices before close.
+- Optional encrypted off-chain bid data: each vault publishes the creator's **ECIES public key**, and every commitment carries a storage root pointing to the encrypted payload.
+- Full on-chain audit trail through `getAuditData()`.
+
+### 🏛 Institutional compliance
+- **On-chain KYB registry** (`verified`, `isAccredited`, `institutionJurisdiction`) managed by the platform's compliance role.
+- **Per-auction restrictions**: bidder whitelist, accredited-investor requirement, allowed jurisdictions (e.g. `UAE`, `KSA`).
+- **Conflict of interest**: affiliated addresses are blocked, and every bidder must sign an EIP-712 attestation.
+- **Daily re-screening** (Vercel cron) that can revoke an institution's on-chain verification after a sanctions hit.
+
+### 🛡 Settlement safety
+- **Creator bond** that the admin or the oracle can slash for fraud (80% to the victim, 20% burned).
+- **Payment escrow** in DDSC until the oracle confirms delivery.
+- **Second-bidder fallback**: if the winner does not pay in time, their deposit is slashed and the runner-up takes over.
+- **Buyer protections**: the winner can dispute a delivery, or reclaim the payment if the oracle never responds (`claimOracleTimeout`).
+- **Emergency pause** for compliance incidents, plus a reentrancy guard on every function that moves funds.
+
+### 🤖 AI assistant for bidders and creators
+Server-side AI endpoints (`/api/ai/*`) powered by Google Gemini, with a pure statistical fallback when the model is unavailable:
+RFP generation, lot analysis, bid drafting, bid competitiveness against market data, abnormally-low-bid detection, bid scoring and a post-reveal report.
+
+---
+
+## Architecture
 
 ```
-cd my-dapp-example
+┌───────────────────────────── Next.js app (Vercel) ─────────────────────────────┐
+│  Landing · Auctions list · Create auction · Auction detail / BidPanel · KYB    │
+│                                                                                │
+│  API routes:  /api/kyb/*  (Sumsub, on-chain credentialing)                     │
+│               /api/ai/*   (Gemini + statistical fallback)                      │
+│               /api/cron/rescreen  (daily sanctions re-screening)               │
+│                         │                         │                            │
+│                    PostgreSQL (Prisma)       wagmi / viem                      │
+└─────────────────────────────────────────────────────┼──────────────────────────┘
+                                                      │
+                        ┌──────────────── ADI Chain ──┴──────────────┐
+                        │  ShadowBidFactory                          │
+                        │   ├─ KYB registry + roles (AccessControl)  │
+                        │   └─ clones ──► ShadowBidVault (1/auction) │
+                        └────────────────────────────────────────────┘
+```
+
+| Contract | Role |
+|---|---|
+| [`ShadowBidFactory`](packages/hardhat/contracts/ShadowBidFactory.sol) | Global KYB registry (verification, accreditation, jurisdiction, affiliations), roles (`ADMIN_ROLE`, `BUYER_ROLE`), creates one vault per auction via EIP-1167 clones. |
+| [`ShadowBidVault`](packages/hardhat/contracts/ShadowBidVault.sol) | One sealed-bid auction: commit, reveal, settlement, deposits, creator bond, escrow, oracle delivery, fallback and disputes. |
+| [`MockERC20`](packages/hardhat/contracts/MockERC20.sol) | Test settlement token standing in for DDSC. |
+
+### Deployed contracts (ADI Testnet, chain ID 99999)
+
+| Contract | Address |
+|---|---|
+| ShadowBidFactory | [`0xEeeF70011E37EAe0Ec00B70a85Fc7218DF685d3b`](https://explorer.ab.testnet.adifoundation.ai/address/0xEeeF70011E37EAe0Ec00B70a85Fc7218DF685d3b) |
+| ShadowBidVault (implementation) | [`0x0271358Aa688Fe130775DcD6E374439B6DB4CF87`](https://explorer.ab.testnet.adifoundation.ai/address/0x0271358Aa688Fe130775DcD6E374439B6DB4CF87) |
+
+---
+
+## Tech stack
+
+| Layer | Tools |
+|---|---|
+| Smart contracts | Solidity 0.8.30, OpenZeppelin (AccessControl, Clones, EIP712, ECDSA, ReentrancyGuard), Hardhat + hardhat-deploy |
+| Frontend | Next.js (App Router), React, TypeScript, wagmi, viem, RainbowKit, Tailwind CSS + DaisyUI |
+| Backend | Next.js API routes, Prisma, PostgreSQL, Vercel Cron |
+| Compliance | Sumsub (KYB), ComplyAdvantage (sanctions screening) |
+| AI | Google Gemini, statistical fallback |
+| Base template | [Scaffold-ETH 2](https://scaffoldeth.io) |
+
+---
+
+## Repository structure
+
+```
+packages/
+├── hardhat/                  # Smart contracts (current version)
+│   ├── contracts/            # ShadowBidFactory, ShadowBidVault, MockERC20
+│   ├── deploy/               # hardhat-deploy script (impl + factory, auto-KYB of deployer)
+│   ├── deployments/adiTestnet/
+│   └── test/ShadowBid.test.ts
+└── nextjs/                   # dApp
+    ├── app/                  # pages: /, /auctions, /auctions/create, /auctions/[id], /kyb
+    │   └── api/              # kyb/*, ai/*, cron/rescreen
+    ├── components/darkpool/  # Hero, BidPanel, VaultCard, Countdown…
+    ├── components/ai/        # AI widgets
+    ├── lib/                  # contracts, Sumsub, sanctions, Prisma
+    └── prisma/schema.prisma  # Institution, KybAuditLog
+contracts/                    # Earlier hackathon prototype (incl. a 0G ERC-7857 iNFT scoring agent)
+```
+
+---
+
+## Getting started
+
+### Requirements
+- Node.js ≥ 20.18.3
+- Yarn
+- PostgreSQL (only for the KYB features)
+
+### Run locally
+
+```bash
 yarn install
-```
 
-2. Run a local network in the first terminal:
-
-```
+# terminal 1: local blockchain
 yarn chain
-```
 
-This command starts a local Ethereum network using Hardhat. The network runs on your local machine and can be used for testing and development. You can customize the network configuration in `packages/hardhat/hardhat.config.ts`.
-
-3. On a second terminal, deploy the test contract:
-
-```
+# terminal 2: deploy the factory and vault implementation
 yarn deploy
-```
 
-This command deploys a test smart contract to the local network. The contract is located in `packages/hardhat/contracts` and can be modified to suit your needs. The `yarn deploy` command uses the deploy script located in `packages/hardhat/deploy` to deploy the contract to the network. You can also customize the deploy script.
-
-4. On a third terminal, start your NextJS app:
-
-```
+# terminal 3: frontend on http://localhost:3000
 yarn start
 ```
 
-Visit your app on: `http://localhost:3000`. You can interact with your smart contract using the `Debug Contracts` page. You can tweak the app config in `packages/nextjs/scaffold.config.ts`.
+The deploy script automatically KYB-verifies the deployer and gives it `BUYER_ROLE`, so you can create an auction right away. To let other wallets take part:
 
-Run smart contract test with `yarn hardhat:test`
+```solidity
+factory.verifyInstitution(wallet, /*accredited*/ true, "UAE", "0x"); // allow bidding
+factory.grantBuyerRole(wallet);                                       // allow creating auctions
+```
 
-- Edit your smart contracts in `packages/hardhat/contracts`
-- Edit your frontend homepage at `packages/nextjs/app/page.tsx`. For guidance on [routing](https://nextjs.org/docs/app/building-your-application/routing/defining-routes) and configuring [pages/layouts](https://nextjs.org/docs/app/building-your-application/routing/pages-and-layouts) checkout the Next.js documentation.
-- Edit your deployment scripts in `packages/hardhat/deploy`
+> The app targets ADI Testnet by default. To use your local chain, change `targetNetworks` in `packages/nextjs/scaffold.config.ts`.
 
-## Documentation
+### Deploy to ADI Testnet
 
-Visit our [docs](https://docs.scaffoldeth.io) to learn how to start building with Scaffold-ETH 2.
+```bash
+yarn generate              # or: yarn account:import
+yarn deploy --network adiTestnet
+```
 
-To know more about its features, check out our [website](https://scaffoldeth.io).
+Then set `NEXT_PUBLIC_FACTORY_ADDRESS` in `packages/nextjs/.env.local`.
 
-## Contributing to Scaffold-ETH 2
+### Environment variables
 
-We welcome contributions to Scaffold-ETH 2!
+Copy `packages/nextjs/.env.local.example` to `packages/nextjs/.env.local`. The main variables:
 
-Please see [CONTRIBUTING.MD](https://github.com/scaffold-eth/scaffold-eth-2/blob/main/CONTRIBUTING.md) for more information and guidelines for contributing to Scaffold-ETH 2.
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection (KYB records and audit log) |
+| `SUMSUB_APP_TOKEN`, `SUMSUB_SECRET_KEY`, `SUMSUB_WEBHOOK_SECRET` | KYB provider. Without them the app runs in **demo mode** (`/api/kyb/demo-approve`). |
+| `COMPLY_ADVANTAGE_API_KEY` | Sanctions screening (skipped in demo mode) |
+| `PLATFORM_ADMIN_PRIVATE_KEY`, `FACTORY_CONTRACT_ADDRESS`, `NEXT_PUBLIC_FACTORY_ADDRESS` | Server-side on-chain credentialing of approved institutions |
+| `GEMINI_API_KEY` | AI features |
+| `CRON_SECRET` | Protects `/api/cron/rescreen` |
+
+### Tests
+
+```bash
+yarn hardhat:test
+```
+
+The suite (`packages/hardhat/test/ShadowBid.test.ts`, 41 tests) covers KYB gating, commit–reveal, deposit slashing, settlement, bonds, escrow, oracle flows and the second-bidder fallback.
+
+---
+
+## Team
+
+Built at ETHDenver 2026 by [@jojo2504](https://github.com/jojo2504), [@bilfrux](https://github.com/bilfrux) and [@wilivms](https://github.com/wilivms).
+
+Original repository: [jojo2504/dark-pool](https://github.com/jojo2504/dark-pool).
+
+## License
+
+MIT. Built on [Scaffold-ETH 2](https://github.com/scaffold-eth/scaffold-eth-2) by BuidlGuidl.
