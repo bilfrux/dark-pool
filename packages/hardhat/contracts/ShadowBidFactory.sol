@@ -109,6 +109,7 @@ contract ShadowBidFactory is AccessControl {
     function revokeInstitution(address inst) external onlyRole(ADMIN_ROLE) {
         verified[inst] = false;
         isAccredited[inst] = false;
+        _revokeRole(BUYER_ROLE, inst); // a revoked institution must not keep creating auctions
         emit InstitutionRevoked(inst);
     }
 

@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 interface IShadowBidFactory {
     function verified(address) external view returns (bool);
@@ -29,6 +30,11 @@ interface IShadowBidFactory {
  */
 contract ShadowBidVault is ReentrancyGuard, EIP712 {
     using ECDSA for bytes32;
+    using SafeERC20 for IERC20;
+
+    /// @dev After this delay past the reveal deadline, anyone can settle, so a creator
+    ///      who never settles cannot lock bidders' deposits forever.
+    uint256 public constant SETTLE_GRACE_PERIOD = 3 days;
 
     // ─── Platform ─────────────────────────────────────────────────────────────
     IShadowBidFactory public factory;
@@ -368,13 +374,15 @@ contract ShadowBidVault is ReentrancyGuard, EIP712 {
 
     // ─── Settlement ───────────────────────────────────────────────────────────
 
-    function settle() external nonReentrant notPaused onlyBuyer {
+    function settle() external nonReentrant notPaused {
         require(block.timestamp > revealDeadline, "Reveal window not closed");
         require(phase == Phase.REVEAL, "Not in REVEAL phase");
-        require(suppliers.length > 0, "No bidders");
+        require(
+            msg.sender == buyer || block.timestamp > revealDeadline + SETTLE_GRACE_PERIOD,
+            "Not the auction creator"
+        );
 
         phase = Phase.SETTLED;
-        emit PhaseChanged(Phase.SETTLED);
 
         address bestSupplier = address(0);
         uint256 bestPrice = type(uint256).max;
@@ -407,7 +415,17 @@ contract ShadowBidVault is ReentrancyGuard, EIP712 {
             }
         }
 
-        require(bestSupplier != address(0), "No valid bids after reveal");
+        if (bestSupplier == address(0)) {
+            // No bids or nobody revealed: close the auction instead of locking the bond forever.
+            // Non-revealers' deposits were already slashed to the creator above.
+            phase = Phase.CANCELLED;
+            emit PhaseChanged(Phase.CANCELLED);
+            _returnCreatorBondAndAsset();
+            emit AuctionCancelled(0);
+            return;
+        }
+
+        emit PhaseChanged(Phase.SETTLED);
 
         winner = bestSupplier;
         winningPrice = bestPrice;
@@ -448,7 +466,7 @@ contract ShadowBidVault is ReentrancyGuard, EIP712 {
         require(block.timestamp <= settlementDeadline, "Settlement window expired");
 
         // Settlement is always DDSC (ERC-20). Caller must approve vault first.
-        IERC20(settlementToken).transferFrom(msg.sender, address(this), winningBidAmount);
+        IERC20(settlementToken).safeTransferFrom(msg.sender, address(this), winningBidAmount);
 
         paymentSubmitted = true;
 
@@ -484,7 +502,7 @@ contract ShadowBidVault is ReentrancyGuard, EIP712 {
     function _releasePaymentToCreator() internal {
         uint256 amount = winningBidAmount;
         winningBidAmount = 0;
-        IERC20(settlementToken).transfer(buyer, amount);
+        IERC20(settlementToken).safeTransfer(buyer, amount);
     }
 
     function disputeDelivery() external {
@@ -505,7 +523,7 @@ contract ShadowBidVault is ReentrancyGuard, EIP712 {
         winningBidAmount = 0;
         paymentSubmitted = false;
 
-        IERC20(settlementToken).transfer(winner, amount);
+        IERC20(settlementToken).safeTransfer(winner, amount);
 
         emit OracleTimedOut(block.timestamp);
     }
@@ -599,14 +617,23 @@ contract ShadowBidVault is ReentrancyGuard, EIP712 {
             }
         }
 
+        _returnCreatorBondAndAsset();
+
+        emit AuctionCancelled(refunded);
+    }
+
+    /// @dev Returns the creator's bond and any escrowed ERC-721 when an auction ends without a sale.
+    function _returnCreatorBondAndAsset() internal {
         if (creatorBond > 0 && !bondSlashed) {
             uint256 bond = creatorBond;
             creatorBond = 0;
             (bool ok, ) = payable(buyer).call{ value: bond }("");
             require(ok, "Bond return failed");
         }
-
-        emit AuctionCancelled(refunded);
+        if (assetTokenEscrowed) {
+            assetTokenEscrowed = false;
+            IERC721(assetTokenContract).transferFrom(address(this), buyer, assetTokenId);
+        }
     }
 
     // ─── Audit ────────────────────────────────────────────────────────────────

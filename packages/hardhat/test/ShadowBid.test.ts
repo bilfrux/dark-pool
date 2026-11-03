@@ -752,6 +752,72 @@ describe("ShadowBidVault — Bidding Lifecycle", function () {
     });
   });
 
+  // ── Liveness fixes (v2) ───────────────────────────────────────────────────
+
+  describe("settle — liveness", function () {
+    /** supplier1 commits a bid; moves to the REVEAL phase without revealing */
+    async function commitThenClose() {
+      const fix = await deployVaultFixture();
+      const { vault, vaultAddress, supplier1, depositRequired, closeTime, chainId } = fix;
+      const price = ethers.parseEther("1");
+      const salt = ethers.encodeBytes32String("s").slice(0, 66) as `0x${string}`;
+      const hash = ethers.solidityPackedKeccak256(["uint256", "bytes32", "address"], [price, salt, supplier1.address]);
+      const ts = await time.latest();
+      const sig = await signConflictAttestation(supplier1, vaultAddress, ts, chainId);
+      await vault.connect(supplier1).submitConflictAttestation(ts, sig);
+      await vault.connect(supplier1).commitBid(hash, "ipfs://Qm", { value: depositRequired });
+      await time.increaseTo(closeTime + 1);
+      await vault.triggerRevealPhase();
+      return { ...fix, price, salt };
+    }
+
+    it("lets anyone settle once the grace period has passed", async function () {
+      const { vault, supplier1, stranger, price, salt } = await commitThenClose();
+      await vault.connect(supplier1).revealBid(price, salt);
+      const deadline = Number(await vault.revealDeadline());
+      const grace = Number(await vault.SETTLE_GRACE_PERIOD());
+
+      await time.increaseTo(deadline + 1);
+      await expect(vault.connect(stranger).settle()).to.be.revertedWith("Not the auction creator");
+
+      await time.increaseTo(deadline + grace + 1);
+      await expect(vault.connect(stranger).settle()).to.emit(vault, "WinnerSelected");
+      expect(await vault.winner()).to.equal(supplier1.address);
+    });
+
+    it("closes the auction when nobody revealed instead of locking funds", async function () {
+      const { vault, vaultAddress, buyer, depositRequired, bond } = await commitThenClose();
+      await time.increaseTo(Number(await vault.revealDeadline()) + 1);
+
+      // Non-revealer's deposit is slashed to the creator and the creator's bond comes back
+      await expect(vault.connect(buyer).settle()).to.changeEtherBalances(
+        [buyer, vaultAddress],
+        [depositRequired + bond, -(depositRequired + bond)],
+      );
+      expect(await vault.phase()).to.equal(3); // CANCELLED
+      expect(await vault.creatorBond()).to.equal(0);
+    });
+
+    it("closes an auction that received no bids", async function () {
+      const { vault, buyer, closeTime, bond, vaultAddress } = await deployVaultFixture();
+      await time.increaseTo(closeTime + 1);
+      await vault.triggerRevealPhase();
+      await time.increaseTo(Number(await vault.revealDeadline()) + 1);
+      await expect(vault.connect(buyer).settle()).to.changeEtherBalances([buyer, vaultAddress], [bond, -bond]);
+      expect(await vault.phase()).to.equal(3); // CANCELLED
+    });
+  });
+
+  describe("revokeInstitution", function () {
+    it("also removes BUYER_ROLE", async function () {
+      const { factory, admin, buyer } = await deployVaultFixture();
+      const BUYER_ROLE = await factory.BUYER_ROLE();
+      expect(await factory.hasRole(BUYER_ROLE, buyer.address)).to.be.true;
+      await factory.connect(admin).revokeInstitution(buyer.address);
+      expect(await factory.hasRole(BUYER_ROLE, buyer.address)).to.be.false;
+    });
+  });
+
   // ── Payment & Delivery ────────────────────────────────────────────────────
 
   describe("submitPayment + confirmDelivery", function () {
