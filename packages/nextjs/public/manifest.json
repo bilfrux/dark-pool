@@ -1,5 +1,5 @@
 {
   "name": "Dark Pool",
   "description": "Compliant sealed-bid auctions for institutional real-world assets, on ADI Chain.",
-  "iconPath": "logo.svg"
+  "iconPath": "icon.svg"
 }

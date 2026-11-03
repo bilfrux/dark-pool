@@ -1,5 +1,8 @@
-<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
   <rect width="128" height="128" rx="28" fill="#000000"/>
-  <path d="M30.2 68 C41.5 60 52.7 60 64 68 C75.3 76 86.5 76 97.8 68 A34 34 0 0 1 30.2 68 Z" fill="#ffffff"/>
-  <path d="M64 26.5 A37.5 37.5 0 1 1 63.99 26.5 Z M64 33.5 A30.5 30.5 0 1 0 64.01 33.5 Z" fill="#ffffff" fill-rule="evenodd"/>
+  <g transform="translate(1.6 41.4) scale(0.34)">
+    <path fill="#ffffff" d="M26 34 H42 V42 H34 V86 H42 V94 H26 Z M102 34 H86 V42 H94 V86 H86 V94 H102 Z"/>
+  <path fill="#ffffff" fill-rule="evenodd" d="M46 46 H82 V82 H46 Z M54 54 V74 H74 V54 Z"/>
+  </g>
+  <text x="41" y="69" fill="#ffffff" font-family="'JetBrains Mono','SF Mono',Menlo,Consolas,monospace" font-weight="700" font-size="13" letter-spacing="0.3">DARK POOL</text>
 </svg>

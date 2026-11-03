@@ -50,7 +50,7 @@ export const getMetadata = ({
           sizes: "256x256",
           type: "image/png",
         },
-        { url: "/logo.svg", type: "image/svg+xml" },
+        { url: "/icon.svg", type: "image/svg+xml" },
       ],
       apple: "/favicon.png",
     },
